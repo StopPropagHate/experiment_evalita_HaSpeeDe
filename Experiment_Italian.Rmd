@@ -1,0 +1,723 @@
+---
+title: "Experiment"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("~/repositories/experiment_deep_learning/R/Experiment_italian")
+
+#reticulate::py_config()
+#reticulate::use_python("/Users/paulafortuna/anaconda3/envs/r-tensorflow/bin/python")
+```
+
+## Experiment with FB and TW datasets
+
+This is an Experiment with deep learning and word embedding, using Keras. We followed two different the tutorials:
+
+https://github.com/kylehamilton/deep-learning-with-r-notebooks/blob/master/notebooks/6.1-using-word-embeddings.Rmd
+https://cran.r-project.org/web/packages/kerasR/vignettes/introduction.html
+
+### Load data
+
+```{r load from file, results="hide"}
+dataset_hs_FB <- read.csv(file="haspeede_FB-train.csv", header=FALSE, sep=";")
+dataset_hs_TW <- read.csv(file="haspeede_TW-train.csv", header=FALSE, sep=";")
+
+dataset_hs_FB$V3 <- NULL
+dataset_hs_FB$V4 <- NULL
+dataset_hs_FB$V5 <- NULL
+dataset_hs_FB$V6 <- NULL
+
+colnames(dataset_hs_FB) <- c("text", "Hate_speech")
+
+dataset_hs_TW$V3 <- NULL
+dataset_hs_TW$V4 <- NULL
+dataset_hs_TW$V5 <- NULL
+dataset_hs_TW$V6 <- NULL
+
+colnames(dataset_hs_TW) <- c("text", "Hate_speech")
+
+############ read test data
+dataset_hs_FB_test <- read.csv(file="haspeede_FB-test.csv", header=TRUE, sep=";")
+dataset_hs_TW_test <- read.csv(file="haspeede_TW-test.csv", header=TRUE, sep=";")
+
+dataset_hs_FB_test$id <- NULL
+dataset_hs_FB_test$X <- NULL
+dataset_hs_FB_test$X.1 <- NULL
+dataset_hs_FB_test$X.2 <- NULL
+dataset_hs_FB_test$X.3 <- NULL
+dataset_hs_FB_test$X.4 <- NULL
+
+colnames(dataset_hs_FB_test) <- c("text")
+
+dataset_hs_TW_test$Id <- NULL
+dataset_hs_TW_test$X <- NULL
+dataset_hs_TW_test$X.1 <- NULL
+dataset_hs_TW_test$X.2 <- NULL
+dataset_hs_TW_test$X.3 <- NULL
+dataset_hs_TW_test$X.4 <- NULL
+
+colnames(dataset_hs_TW_test) <- c("text")
+
+```
+
+### Data conversion and division in train and test set
+
+```{r}
+
+test_train_preparation <- function(){
+  
+  # Split the data into a training set and a validation set
+  # But assure shuffled data
+  training_samples <- as.integer(0.7*nrow(dataset_hs))      # We will be training on 200 samples # divide in 70% and 30% 
+  validation_samples <- nrow(dataset_hs) - training_samples   # We will be validating on 10000 samples
+  
+  indices <- 1:nrow(dataset_hs)
+  training_indices <- indices[1:training_samples]
+  validation_indices <- indices[(training_samples + 1): 
+                                    (training_samples + validation_samples)]
+  
+  # convert to binary
+  labels_hate_speech <- as.integer(dataset_hs$Hate_speech)
+  labels_hate_speech <- as.array(labels_hate_speech)
+  
+  x_train <<- dataset_hs[training_indices,]
+  y_train_hate_speech <<- labels_hate_speech[training_indices]
+  
+  x_val <<- dataset_hs[validation_indices,]
+  y_val_hate_speech <<- labels_hate_speech[validation_indices]
+  
+}
+
+#prepare facebook train and validation set
+
+dataset_hs <- dataset_hs_FB
+test_train_preparation()
+
+write.csv(x_train, file = "intermediate_datasets/x_train_FB.csv", row.names = FALSE)
+write.csv(x_val, file = "intermediate_datasets/x_val_FB.csv", row.names = FALSE)
+write.csv(y_train_hate_speech, file = "intermediate_datasets/y_train_FB.csv", row.names = FALSE)
+write.csv(y_val_hate_speech, file = "intermediate_datasets/y_val_FB.csv", row.names = FALSE)
+
+remove(dataset_hs)
+
+#prepare Twitter train and validation set
+dataset_hs <- dataset_hs_TW
+test_train_preparation()
+
+write.csv(x_train, file = "intermediate_datasets/x_train_TW.csv", row.names = FALSE)
+write.csv(x_val, file = "intermediate_datasets/x_val_TW.csv", row.names = FALSE)
+write.csv(y_train_hate_speech, file = "intermediate_datasets/y_train_TW.csv", row.names = FALSE)
+write.csv(y_val_hate_speech, file = "intermediate_datasets/y_val_TW.csv", row.names = FALSE)
+
+remove(dataset_hs)
+
+```
+
+### Prepare data for experiment
+```{r}
+
+# hate speech frequencies
+hate_speech_general_percentage <- (948 + 658) / (948 + 658 + 1152 + 1440)
+classes_weights <- setNames(as.list(c(1-hate_speech_general_percentage, hate_speech_general_percentage)), c(0, 1))
+
+
+prepare_data_experiment <- function(experiment){
+  
+  if(experiment == "Task 1: HaSpeeDe-FB"){
+    x_train <<- read.csv(file="intermediate_datasets/x_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech <<- y_train_hate_speech$x
+    x_val <<- read.csv(file="intermediate_datasets/x_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+    
+  } else if (experiment == "Task 2: HaSpeeDe-TW"){
+    
+    x_train <<- read.csv(file="intermediate_datasets/x_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <<- y_train_hate_speech$x
+    x_val <<- read.csv(file="intermediate_datasets/x_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+    
+  } else if (experiment == "Task 3.1: Cross-HaSpeeDe_FB"){
+    
+    x_train <<- read.csv(file="intermediate_datasets/x_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech <<- y_train_hate_speech$x
+    x_val <<- read.csv(file="intermediate_datasets/x_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+    
+  } else if (experiment == "Task 3.2: Cross-HaSpeeDe_TW"){
+    
+    x_train <<- read.csv(file="intermediate_datasets/x_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <<- y_train_hate_speech$x
+    x_val <<- read.csv(file="intermediate_datasets/x_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+    
+  } else if (experiment == "Task 1: HaSpeeDe-FB_mix_model"){
+    
+    x_train <- read.csv(file="intermediate_datasets/x_train_FB.csv", header=TRUE, sep=",")
+    x_train_2 <- read.csv(file="intermediate_datasets/x_train_TW.csv", header=TRUE, sep=",")
+    x_train <<- rbind(x_train, x_train_2)
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech_2 <- read.csv(file="intermediate_datasets/y_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- rbind(y_train_hate_speech, y_train_hate_speech_2)
+    y_train_hate_speech <<- y_train_hate_speech$x
+    
+    x_val <<- read.csv(file="intermediate_datasets/x_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_FB.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+    
+  } else if (experiment == "Task 2: HaSpeeDe-TW_mix_model"){
+    x_train <- read.csv(file="intermediate_datasets/x_train_FB.csv", header=TRUE, sep=",")
+    x_train_2 <- read.csv(file="intermediate_datasets/x_train_TW.csv", header=TRUE, sep=",")
+    x_train <<- rbind(x_train, x_train_2)
+    y_train_hate_speech <- read.csv(file="intermediate_datasets/y_train_FB.csv", header=TRUE, sep=",")
+    y_train_hate_speech_2 <- read.csv(file="intermediate_datasets/y_train_TW.csv", header=TRUE, sep=",")
+    y_train_hate_speech <- rbind(y_train_hate_speech, y_train_hate_speech_2)
+    y_train_hate_speech <<- y_train_hate_speech$x
+    
+    x_val <<- read.csv(file="intermediate_datasets/x_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <- read.csv(file="intermediate_datasets/y_val_TW.csv", header=TRUE, sep=",")
+    y_val_hate_speech <<- y_val_hate_speech$x
+  }
+}
+
+```
+
+
+### Training data pre-processing
+```{r}
+# Remove RT and links.
+
+data_pre_processing <- function(dataset){
+  # Get rid of URLs
+  dataset$text <- gsub(" ?(f|ht)(tp)(s?)(://)(.*)[.|/](.*)", "", dataset$text)
+  # Take out retweet header, there is only one
+  dataset$text <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", dataset$text)
+  return(dataset)
+}
+```
+
+
+### word embedding
+
+```{r}
+# from https://github.com/kylehamilton/deep-learning-with-r-notebooks/blob/master/notebooks/6.1-using-word-embeddings.Rmd
+
+#reticulate::use_python("/Users/paulafortuna/anaconda3/envs/r-tensorflow/bin/python")
+
+maxlen <- 100                 # We will cut reviews after 100 words
+max_words <- 10000            # We will only consider the top 10,000 words in the dataset
+   
+library(keras)
+tokenization <- function(maxlen, max_words, dataset, file_sufix){
+    
+  tokenizer <- keras::text_tokenizer(num_words = max_words) %>% 
+    keras::fit_text_tokenizer(dataset$text)
+  keras::save_text_tokenizer(tokenizer, paste0("tokenizers/tokenizer", file_sufix))
+  
+  sequences <- keras::texts_to_sequences(tokenizer, dataset$text)
+    
+  word_index <<- tokenizer$word_index
+  cat("Found", length(word_index), "unique tokens.\n")
+    
+  data <- keras::pad_sequences(sequences, maxlen = maxlen)
+  return(data)
+}
+```
+
+### Recurrent Neural Networks (RNN) 
+
+```{r, results="hide"}
+
+num_folds <- 10
+var_num_epochs <- 10
+var_batch_size <- 128
+
+library(keras)
+F1 <- custom_metric("custom", function(y_true, y_pred) {
+    y_correct <- y_true * y_pred
+    sum_true <- k_sum(y_true, axis=1)
+    sum_pred <- k_sum(y_pred, axis=1)
+    sum_correct <- k_sum(y_correct, axis=1)
+    precision <- sum_correct / sum_pred
+    recall <- sum_correct / sum_true
+    F1 <- 2*(precision*recall)/(precision + recall)
+    return(k_identity(F1))
+  })
+
+build_model <- function() {
+  
+  model <- keras_model_sequential() %>%
+    layer_embedding(input_dim = 10000, output_dim = 32,
+                    input_length = maxlen) %>%
+    layer_dropout(rate = 0.25) %>%
+    layer_flatten() %>%
+    layer_dense(units = 256, activation = "relu") %>%
+    layer_dropout(rate = 0.25) %>%
+    layer_dense(units = 1, activation = "sigmoid")
+  
+  model %>% compile(
+    optimizer = "rmsprop",
+    loss = "binary_crossentropy",
+    metrics = F1
+  )
+  summary(model)
+  return(model)
+}
+
+keras_model_cv <- function(x_train, y_train, file_prefix){
+  
+  # extracted from https://cran.r-project.org/web/packages/kerasR/vignettes/introduction.html
+  # then translated to package keras
+  input_train <- keras::pad_sequences(x_train, maxlen = maxlen)
+  y_train <- y_train
+  
+  library(keras)
+  
+  # Validating your approach using K-fold validation
+  k <- num_folds
+  indices <- sample(1:nrow(input_train))
+  folds <- cut(indices, breaks = k, labels = FALSE)
+  
+  num_epochs <- var_num_epochs
+  batch_size <- var_batch_size
+  all_custom_histories <- NULL
+  all_val_custom_histories <- NULL
+  all_loss_histories <- NULL
+  all_val_loss_histories <- NULL
+  for (i in 1:k) {
+    cat("processing fold #", i, "\n")
+    val_indices <- which(folds == i, arr.ind = TRUE)
+    val_data <- input_train[val_indices,]
+    val_targets <- y_train[val_indices]
+    partial_train_data <- input_train[-val_indices,]
+    partial_train_targets <- y_train[-val_indices]
+    model <- build_model()
+    history <- model %>% fit(
+      input_train, y_train,
+      epochs = num_epochs,
+      batch_size = batch_size,
+      class_weight=classes_weights,
+      validation_split=0.1
+    )
+    #save metrics
+    custom_history <- history$metrics$custom
+    val_custom_history <- history$metrics$val_custom
+    loss_history <- history$metrics$loss
+    val_loss_history <- history$metrics$val_loss
+    
+    all_custom_histories <<- rbind(all_custom_histories, custom_history)
+    all_val_custom_histories <<- rbind(all_val_custom_histories, val_custom_history)
+    all_loss_histories <<- rbind(all_loss_histories, loss_history)
+    all_val_loss_histories <<- rbind(all_val_loss_histories, val_loss_history)
+  }
+}
+
+analyse_models <- function(file_suffix){
+  
+  filename <- paste0("statistics/statistics", file_suffix)
+  
+  #Building the history of successive mean K-fold validation scores
+  average_custom_history <- data.frame(
+    epoch = seq(1:ncol(all_custom_histories)),
+    value = apply(all_custom_histories, 2, mean),
+    data = "training",
+    metric = "F1"
+  )
+  average_val_custom_history <- data.frame(
+    epoch = seq(1:ncol(all_val_custom_histories)),
+    value = apply(all_val_custom_histories, 2, mean),
+    data = "validation",
+    metric = "F1"
+  )
+  average_loss_history <- data.frame(
+    epoch = seq(1:ncol(all_loss_histories)),
+    value = apply(all_loss_histories, 2, mean),
+    data = "training",
+    metric = "loss"
+  )
+  average_val_loss_history <- data.frame(
+    epoch = seq(1:ncol(all_val_loss_histories)),
+    value = apply(all_val_loss_histories, 2, mean),
+    data = "validation",
+    metric = "loss"
+  )
+  
+  df <- rbind(average_custom_history,average_val_custom_history)
+  df <- rbind(df, average_loss_history)
+  df <- rbind(df,average_val_loss_history)
+  
+  print(df)
+  
+  #cols epochs data(training vs validation) metric
+  int_breaks <- function(x) pretty(x)[pretty(x) %% 1 == 0]
+  smooth_args <- list(se = FALSE, method = 'loess', na.rm = TRUE)
+  
+  pdf(paste0(filename,".pdf"), width=8, height=6) 
+  
+  p <- ggplot2::ggplot(df, ggplot2::aes_(~epoch, ~value, color = ~data, fill = ~data)) +
+    ggplot2::geom_point(shape = 21, col = 1, na.rm = TRUE) +
+    do.call(ggplot2::geom_smooth, smooth_args) +
+    ggplot2::facet_grid(metric~., switch = 'y', scales = 'free_y') +
+    ggplot2::scale_x_continuous(breaks = int_breaks) + 
+    ggplot2::theme(axis.title.y = ggplot2::element_blank(), strip.placement = 'outside',
+                   strip.text = ggplot2::element_text(colour = 'black', size = 11),
+                   strip.background = ggplot2::element_rect(fill = NA, color = NA))
+  
+  print(p)
+  dev.off()
+  
+  print(p)
+
+  res <- cbind(average_custom_history,average_val_custom_history)
+  res <- cbind(res, average_loss_history)
+  res <- cbind(res,average_val_loss_history)
+  
+  filename <- paste0(filename,".csv")
+  
+  write.csv(res, file = filename, row.names = FALSE)
+}
+
+save_final_model <- function(epoch_num, batch_size, x_train, y_train, file_prefix){
+  
+  input_train <- keras::pad_sequences(x_train, maxlen = maxlen)
+  
+  model <- build_model()
+  model %>% fit(input_train, y_train,
+              epochs = epoch_num, batch_size = batch_size, verbose = 0)
+  
+  # save model
+  filename <- paste0("models/", file_prefix)
+  filename <- paste0(filename, ".h5")
+  save_model_hdf5(model, filename, overwrite = TRUE,include_optimizer = TRUE)
+}
+
+```
+
+```{r, results="hide"}
+
+apply_tokenizer <- function(x_test, tokenizer_name){
+  reticulate::use_python("/Users/paulafortuna/anaconda3/envs/r-tensorflow/bin/python")
+
+  #read tokenizer
+  tokenizer <- keras::load_text_tokenizer(tokenizer_name)
+  
+  #apply tokenizer to the validation data
+  sequences <- keras::texts_to_sequences(tokenizer, x_test$text)
+  x_test <- keras::pad_sequences(sequences, maxlen = maxlen)
+  
+  return(x_test)
+}
+
+```
+
+```{r, results="hide"}
+
+apply_model <- function(x_val, model_suffix_id){
+
+  model_path <- paste0("models/", model_suffix_id)
+  model_path <- paste0(model_path, ".h5")
+  
+  print("model_path")
+  print(model_path)
+  
+  # read model based on hate_type and language
+  model <- load_model_hdf5(model_path, c("custom" = F1))
+  
+  # apply model to the validation data
+  test_score <- model %>% predict_classes(x_val)
+  
+  return(test_score)
+}
+
+```
+
+
+```{r, results="hide"}
+
+# test_model <- function(model_name, x_test, tokenizer_name){
+#   reticulate::use_python("/Users/paulafortuna/anaconda3/envs/r-tensorflow/bin/python")
+# 
+#   #read tokenizer
+#   tokenizer <- keras::load_text_tokenizer(tokenizer_name)
+#   
+#   #apply tokenizer to the validation data
+#   sequences <- keras::texts_to_sequences(tokenizer, x_val$text)
+#   x_test <- keras::pad_sequences(sequences, maxlen = 100)
+#   
+#   # read model based on hate_type and language
+#   mod <- keras_load(path = model_name)
+#   
+#   # apply model to the validation data
+#   Y_test_hat <- kerasR::keras_predict(mod, x_test)
+#   
+#   return(Y_test_hat)
+#   
+# }
+
+```
+
+### Performance metrics
+
+```{r}
+
+metrics_calculation_with_save <- function(y_val, y_predicted){
+  cm <- caret::confusionMatrix(as.factor(round(y_val)), as.factor(y_predicted), positive="1")
+  
+  TP <- cm$table[2,2]
+  TN <- cm$table[1,1]
+  FP <- cm$table[2,1]
+  FN <- cm$table[1,2]
+  
+  precision <- TP / (TP + FP)
+  recall <- TP / (TP + FN)
+  F1 <- 2*(precision*recall)/(precision + recall)
+  
+  print("CM:")
+  print(cm$table)
+  print("precision:")
+  print(precision)
+  print("recall:")
+  print(recall)
+  print("F1:")
+  print(F1)
+  
+  # save experiment
+  res <- read.csv("statistics/statistic_Task_1_it_fb.csv", header = TRUE,sep = ",")
+  res <- rbind(res, data.frame(precision = precision, recall = recall, F1 = F1))
+  write.csv(res, "statistics/statistic_Task_1_it_fb.csv", row.names = FALSE)
+}
+
+metrics_calculation_with_p_value <- function(y_val, y_predicted,suffix_id){
+  
+  F1 <- function(y_val, y_predicted){
+    cm <- caret::confusionMatrix(as.factor(round(y_val)), as.factor(y_predicted), positive="1")
+    
+    TP <- cm$table[2,2]
+    TN <- cm$table[1,1]
+    FP <- cm$table[2,1]
+    FN <- cm$table[1,2]
+    
+    precision <- TP / (TP + FP)
+    recall <- TP / (TP + FN)
+    F1 <- 2*(precision*recall)/(precision + recall)  
+    return(F1)
+  }
+  
+  p_val_F1 <- function(y_val, y_predicted, N_permu = 1000){ 
+    T_ref <- F1(y_val, y_predicted)
+    T_star <- c()
+    i=1
+    while(i <= N_permu){
+      T_star <- c(T_star, F1(y_val, sample(y_predicted)))
+      i <- i + 1
+    }
+    hist(T_star, xlim = c(0, 1))
+    abline(v = T_ref, lwd = 2)
+    p_val <- (sum(T_star > T_ref | T_star < -T_ref) + 1) / (N_permu + 1) 
+    
+    write(c(T_ref,p_val), paste0("statistics/p_value_", suffix_id))
+  }
+  p_val_F1(y_val,y_predicted)
+}
+
+```
+
+
+#Experiments EVALITA
+```{r}
+
+run_experiment_for_epoch_selection <- function(experiment,suffix_id, data_for_testing){
+  #prepare model_name
+  model_suffix_id <- paste0("model", suffix_id)
+  # The preparation of the data is the only step that is different among experiments
+  prepare_data_experiment(experiment)
+  x_train <- data_pre_processing(x_train)
+  x_train <- tokenization(maxlen, max_words, x_train, suffix_id)
+  x_val <- apply_tokenizer(x_val, paste0("tokenizers/tokenizer",suffix_id))
+  keras_model_cv(x_train, y_train_hate_speech)
+  analyse_models(suffix_id)
+  num_user <- readline(prompt="Enter number of epochs you want to save: ")
+  epoch_num <- num_user
+  batch_size <- var_batch_size
+  save_final_model(epoch_num, batch_size, x_train, y_train_hate_speech, model_suffix_id)
+  
+  y_predicted <- apply_model(x_val, model_suffix_id)
+  metrics_calculation_with_p_value(y_val_hate_speech,y_predicted,suffix_id)
+  
+  # data for submission in context
+  data_for_testing <- data_pre_processing(data_for_testing)
+  data_for_testing <- apply_tokenizer(data.frame(data_for_testing), paste0("tokenizers/tokenizer",suffix_id))
+  y_predicted <- apply_model(data_for_testing, model_suffix_id)
+  # save as tsv
+  write.table(y_predicted[,1], file=paste0(experiment, ".tsv"), quote=FALSE, sep='\t', col.names = FALSE, row.names = FALSE)
+}
+
+```
+
+#Task 1: HaSpeeDe-FB
+```{r}
+suffix_id <- "_it_fb"
+experiment <- "Task 1: HaSpeeDe-FB"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_FB_test)
+
+
+# 7 epochs
+```
+
+```{r}
+"Task 2: HaSpeeDe-TW"
+
+suffix_id <- "_it_tw"
+experiment <- "Task 2: HaSpeeDe-TW"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_TW_test)
+#6
+```
+#Task 3.1: Cross-HaSpeeDe_FB
+```{r}
+"Task 3.1: Cross-HaSpeeDe_FB"
+
+suffix_id <- "_it_train_fb_test_tw"
+experiment <- "Task 3.1: Cross-HaSpeeDe_FB"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_TW_test)
+# 6
+```
+#Task 3.2: Cross-HaSpeeDe_TW
+```{r}
+suffix_id <- "_it_train_tw_test_fb"
+experiment <- "Task 3.2: Cross-HaSpeeDe_TW"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_FB_test)
+# 4
+```
+#Task 1: HaSpeeDe-FB_mix_model
+
+```{r}
+"Task 1: HaSpeeDe-FB_mix_model"
+
+suffix_id <- "_it_train_mix_test_fb"
+experiment <- "Task 1: HaSpeeDe-FB_mix_model"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_FB_test)
+#3
+```
+#Task 2: HaSpeeDe-TW_mix_model
+
+```{r}
+"Task 2: HaSpeeDe-TW_mix_model"
+
+suffix_id <- "_it_train_mix_test_tw"
+experiment <- "Task 2: HaSpeeDe-TW_mix_model"
+
+run_experiment_for_epoch_selection(experiment,suffix_id, dataset_hs_TW_test)
+#4
+```
+
+
+### convert result to same file
+```{r}
+############ read test data
+dataset_hs_FB_test <- read.csv(file="haspeede_FB-test.csv", header=TRUE, sep=";")
+dataset_hs_TW_test <- read.csv(file="haspeede_TW-test.csv", header=TRUE, sep=";")
+
+dataset_hs_FB_test$X <- NULL
+dataset_hs_FB_test$X.1 <- NULL
+dataset_hs_FB_test$X.2 <- NULL
+dataset_hs_FB_test$X.3 <- NULL
+dataset_hs_FB_test$X.4 <- NULL
+
+dataset_hs_TW_test$X <- NULL
+dataset_hs_TW_test$X.1 <- NULL
+dataset_hs_TW_test$X.2 <- NULL
+dataset_hs_TW_test$X.3 <- NULL
+dataset_hs_TW_test$X.4 <- NULL
+
+
+#Task 1 - fb
+task1_fb_res <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task1_HaSpeeDe-FB.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task1_fb_res <- cbind(dataset_hs_FB_test, task1_fb_res)
+write.table(task1_fb_res, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task1_HaSpeeDe-FB_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+
+#Task 1 - mix
+task1_fb_mix_res <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task1_HaSpeeDe-FB_mix_model.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task1_fb_mix_res <- cbind(dataset_hs_FB_test, task1_fb_mix_res)
+write.table(task1_fb_mix_res, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task1_HaSpeeDe-FB_mix_model_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+#Task 2
+task2_tw_res <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task2_HaSpeeDe-TW.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task2_tw_res <- cbind(dataset_hs_TW_test, task2_tw_res)
+write.table(task2_tw_res, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task2_HaSpeeDe-TW_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+
+#Task 2 mix
+task2_tw_mix_res <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task2_HaSpeeDe-TW_mix_model.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task2_tw_mix_res <- cbind(dataset_hs_TW_test, task2_tw_mix_res)
+write.table(task2_tw_mix_res, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task2_HaSpeeDe-TW_mix_model_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+
+#Task 3.1
+task3.1 <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task3.1_Cross-HaSpeeDe_FB.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task3.1 <- cbind(dataset_hs_TW_test, task3.1)
+write.table(task3.1, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task3.1_Cross-HaSpeeDe_FB_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+
+#Task 3.2
+
+
+task3.2 <- read.table(file = 'paper_submited_files/haspeede_StopPropagHate_Task3.2_Cross-HaSpeeDe_TW.tsv',
+                           sep = '\t', 
+                           header = FALSE)
+task3.2 <- cbind(dataset_hs_FB_test, task3.2)
+write.table(task3.2, 
+            file='paper_submited_files/haspeede_StopPropagHate_Task3.2_Cross-HaSpeeDe_TW_2.tsv', 
+            quote=FALSE, sep='\t', 
+            col.names = FALSE, 
+            row.names = FALSE)
+
+
+```
+
+
+
+
+
+
+
+
