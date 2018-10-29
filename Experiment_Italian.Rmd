@@ -233,7 +233,7 @@ tokenization <- function(maxlen, max_words, dataset, file_sufix){
 }
 ```
 
-### Recurrent Neural Networks (RNN) 
+### Simple dense neural network
 
 ```{r, results="hide"}
 
